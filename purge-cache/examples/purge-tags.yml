@@ -1,0 +1,32 @@
+# Cache-tag purge (Enterprise plan only).
+#
+# Cache-tags let you label cached responses (via the `Cache-Tag` response
+# header from your origin) and then invalidate by label rather than by URL.
+# This is the preferred pattern for content sites: tag every product page
+# with `product-<id>` and `category-<id>`, then purge by id when content
+# changes — no need for the deploy pipeline to know every URL.
+
+name: Purge Cloudflare cache (by tag)
+
+on:
+  repository_dispatch:
+    types: [cms-content-changed]
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Purge by cache-tag
+        uses: amitsdalal/FlareOps/purge-cache@v1
+        with:
+          zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          purge_type: tags
+          # Tags arrive in the repository_dispatch payload from the CMS
+          # webhook. Newline-delimited so the list can grow without changing
+          # the workflow.
+          cache_tags: ${{ github.event.client_payload.tags }}
+          bearer_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Show what was sent in case the CMS payload was malformed.
+          debug: 'true'

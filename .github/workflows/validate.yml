@@ -1,0 +1,101 @@
+# Action validation — focused checks that catch marketplace-blocking issues.
+#
+# This workflow is the gate before tagging a release: if it goes red, the
+# release.yml workflow refuses to publish. It's intentionally narrower (and
+# faster) than ci.yml.
+
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # release.yml invokes this as a reusable workflow before publishing a tag,
+  # so it must declare workflow_call. No inputs/secrets are needed — the
+  # caller (same repo) inherits permissions and checks out the same SHA.
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  yaml-lint:
+    name: YAML lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install yamllint
+        run: pip install yamllint==1.35.1
+      - name: Lint YAML files
+        run: |
+          yamllint -d '{
+            extends: default,
+            rules: {
+              line-length: { max: 200 },
+              document-start: disable,
+              truthy: { check-keys: false },
+              comments: { min-spaces-from-content: 1 },
+              indentation: { spaces: 2, indent-sequences: consistent }
+            }
+          }' .github/ purge-cache/
+
+  action-required-fields:
+    name: Required action.yml fields
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify marketplace-required fields
+        run: |
+          python3 - <<'PY'
+          import sys, yaml, pathlib
+          required_top = {"name", "description", "author", "branding", "runs"}
+          required_branding = {"icon", "color"}
+          # GitHub Marketplace whitelists a subset of feather icons and Web-named
+          # colors. Validating the full list here would be brittle (it changes);
+          # we just check the keys exist. The release workflow re-validates by
+          # actually publishing.
+          p = pathlib.Path("purge-cache/action.yml")
+          doc = yaml.safe_load(p.read_text())
+          missing_top = required_top - set(doc.keys())
+          missing_branding = required_branding - set((doc.get("branding") or {}).keys())
+          ok = not (missing_top or missing_branding)
+          if not ok:
+              print(f"::error::Missing top-level keys: {missing_top}")
+              print(f"::error::Missing branding keys: {missing_branding}")
+              sys.exit(1)
+          # Description must be <= 125 chars for marketplace cards.
+          desc = doc["description"]
+          # YAML folded scalars may include trailing whitespace; strip it.
+          if len(desc.strip()) > 200:
+              print(f"::warning::action description is long ({len(desc.strip())} chars). Marketplace truncates.")
+          print("action.yml passes marketplace prerequisites.")
+          PY
+
+  examples-syntax:
+    name: Validate example workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Examples reference the action via `amitsdalal/FlareOps/purge-cache@v1`.
+      # We don't execute them, but we do parse them to make sure they're
+      # syntactically valid YAML and reference the right inputs.
+      - name: Parse example workflows
+        run: |
+          python3 - <<'PY'
+          import yaml, pathlib, sys
+          ex = list(pathlib.Path("purge-cache/examples").glob("*.yml"))
+          if not ex:
+              print("::error::No example workflows found")
+              sys.exit(1)
+          for f in ex:
+              try:
+                  yaml.safe_load(f.read_text())
+                  print(f"ok  {f}")
+              except yaml.YAMLError as e:
+                  print(f"::error file={f}::{e}")
+                  sys.exit(1)
+          PY

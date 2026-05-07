@@ -1,0 +1,83 @@
+name: Bug report
+description: Report a defect in a FlareOps action.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing — please confirm you've upgraded to the latest patch in
+        your major version (`@v1`) and that the issue reproduces. Most "purge
+        not working" reports turn out to be Cloudflare permission misconfigs;
+        check the troubleshooting section in the README first.
+
+  - type: input
+    id: module
+    attributes:
+      label: Module
+      description: Which FlareOps module is affected?
+      placeholder: purge-cache
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Tag or SHA you're using (e.g. `v1.0.0`).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runner
+    attributes:
+      label: Runner
+      options:
+        - GitHub-hosted (ubuntu-latest)
+        - GitHub-hosted (macos-latest)
+        - GitHub-hosted (windows-latest)
+        - Self-hosted Linux
+        - Self-hosted macOS
+        - Self-hosted Windows
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Workflow snippet
+      description: >
+        Minimal workflow that reproduces the issue. **Redact zone IDs and
+        secrets** — paste `***` placeholders instead.
+      render: yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Action logs
+      description: >
+        Relevant log lines (with `debug: 'true'` if possible). Include the
+        `cf-ray` request ID if present — Cloudflare support needs it.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual behavior
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmations
+      options:
+        - label: I removed all secrets, tokens, and zone IDs from the report.
+          required: true
+        - label: I checked the README troubleshooting section.
+          required: true

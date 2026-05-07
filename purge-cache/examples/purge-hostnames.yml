@@ -1,0 +1,26 @@
+# Hostname purge (Enterprise plan only).
+#
+# Useful when a single zone serves many subdomains and a deploy only affects
+# one of them. Purges every cached response whose `Host` matches an entry in
+# the list.
+
+name: Purge Cloudflare cache (by hostname)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Purge specific hostnames
+        uses: amitsdalal/FlareOps/purge-cache@v1
+        with:
+          zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          purge_type: hostnames
+          hostnames: |
+            api.example.com
+            cdn.example.com
+          bearer_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}

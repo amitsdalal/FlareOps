@@ -1,0 +1,48 @@
+# Granular per-file (URL) purge.
+#
+# Use this pattern when you only want to invalidate specific assets — for
+# example, after deploying changes to a small set of static files. Per-file
+# purges are cheaper at the edge than `purge_everything` (no cold-cache spike)
+# and are available on every Cloudflare plan.
+#
+# The `files` input accepts both:
+#   - plain URLs (one per line)
+#   - JSON objects with `url` + `headers` (Cloudflare's vary-aware purge)
+
+name: Purge Cloudflare cache (specific files)
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'Newline-separated list of URLs to purge'
+        required: true
+        type: string
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Purge specific files
+        uses: amitsdalal/FlareOps/purge-cache@v1
+        with:
+          zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          purge_type: files
+          files: ${{ inputs.urls }}
+          bearer_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      # Hard-coded asset list — useful when your build pipeline knows exactly
+      # which files changed. Combine with a `dorny/paths-filter`-style step
+      # to compute the list dynamically.
+      - name: Purge release artifacts
+        uses: amitsdalal/FlareOps/purge-cache@v1
+        with:
+          zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          purge_type: files
+          files: |
+            https://example.com/assets/app.js
+            https://example.com/assets/app.css
+            https://example.com/index.html
+          bearer_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -1,0 +1,32 @@
+# Purge the entire cache for a single Cloudflare zone after a deployment.
+#
+# This is the simplest invocation: triggered on a push to main, calls the
+# action with `purge_type: everything`, and uses an API Token stored as a
+# repository secret. Use this when your build pipeline wholly replaces the
+# site contents and granular purges aren't worth the bookkeeping.
+
+name: Purge Cloudflare cache (everything)
+
+on:
+  push:
+    branches: [main]
+
+# Concurrency block prevents two simultaneous purges from racing each other.
+# Cancel-in-progress is safe here — only the most recent commit's purge is
+# meaningful.
+concurrency:
+  group: cf-purge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Purge everything
+        uses: amitsdalal/FlareOps/purge-cache@v1
+        with:
+          zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          purge_type: everything
+          bearer_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}

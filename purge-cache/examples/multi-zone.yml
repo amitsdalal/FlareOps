@@ -1,0 +1,43 @@
+# Multi-zone purge.
+#
+# When a single deploy fronts multiple Cloudflare zones (e.g. one per region
+# or one per brand), pass them as a newline-separated list via `zone_ids`.
+# The action runs purges sequentially and aggregates per-zone success/fail
+# state into the `zones_processed` and `failed_zones` outputs, which you can
+# pipe into Slack/PagerDuty steps for partial-failure alerting.
+
+name: Purge Cloudflare cache across all zones
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Purge everything across all production zones
+        id: purge
+        uses: amitsdalal/FlareOps/purge-cache@v1
+        with:
+          # Comma- or newline-separated. Both are accepted.
+          zone_ids: |
+            ${{ secrets.CLOUDFLARE_ZONE_ID_US }}
+            ${{ secrets.CLOUDFLARE_ZONE_ID_EU }}
+            ${{ secrets.CLOUDFLARE_ZONE_ID_APAC }}
+          purge_type: everything
+          bearer_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          retries: '5'
+          retry_delay: '3'
+
+      # Surface partial failures even if the action itself succeeded for some
+      # zones. The job fails if any zone failed (the action exits non-zero on
+      # partial failure), so this only runs when at least one purge worked.
+      - name: Notify on partial failure
+        if: failure() && steps.purge.outputs.failed_zones != ''
+        run: |
+          echo "::error::Partial failure: ${{ steps.purge.outputs.failed_zones }}"
+          echo "Succeeded: ${{ steps.purge.outputs.zones_processed }}"

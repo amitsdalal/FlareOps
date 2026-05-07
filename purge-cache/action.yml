@@ -1,0 +1,173 @@
+name: 'FlareOps – Cloudflare Cache Purge'
+description: >-
+  Production-grade Cloudflare cache purge action. Supports purge_everything,
+  files, hostnames, cache-tags, prefixes, and multi-zone purges with retries,
+  exponential backoff, dry-run, and structured logging.
+author: 'FlareOps'
+
+branding:
+  icon: 'refresh-cw'
+  color: 'orange'
+
+inputs:
+  zone_id:
+    description: >-
+      Cloudflare Zone ID for a single-zone purge. Either `zone_id` or
+      `zone_ids` must be provided.
+    required: false
+    default: ''
+
+  zone_ids:
+    description: >-
+      Comma-, newline-, or space-separated list of Cloudflare Zone IDs for
+      multi-zone purges. Takes precedence over `zone_id` when set.
+    required: false
+    default: ''
+
+  purge_type:
+    description: >-
+      One of: `everything`, `files`, `hostnames`, `tags`, `prefixes`. Determines
+      which payload is sent to the Cloudflare API.
+    required: true
+    default: 'everything'
+
+  files:
+    description: >-
+      Newline- or comma-separated list of absolute URLs to purge. Used when
+      `purge_type=files`. Each entry may be a plain URL string or a JSON object
+      compliant with the Cloudflare files-with-headers schema.
+    required: false
+    default: ''
+
+  hostnames:
+    description: >-
+      Newline- or comma-separated list of hostnames to purge. Used when
+      `purge_type=hostnames`. Requires Enterprise plan on Cloudflare.
+    required: false
+    default: ''
+
+  cache_tags:
+    description: >-
+      Newline- or comma-separated list of cache-tags to purge. Used when
+      `purge_type=tags`. Requires Enterprise plan on Cloudflare.
+    required: false
+    default: ''
+
+  prefixes:
+    description: >-
+      Newline- or comma-separated list of URL prefixes (e.g. `example.com/foo`)
+      to purge. Used when `purge_type=prefixes`. Requires Enterprise plan.
+    required: false
+    default: ''
+
+  bearer_token:
+    description: >-
+      Cloudflare API Token (preferred). When set, Bearer authentication is used
+      and `email`/`api_key` are ignored. Store this as a repository secret.
+    required: false
+    default: ''
+
+  email:
+    description: >-
+      Cloudflare account email. Required only when `bearer_token` is empty;
+      must be paired with `api_key`.
+    required: false
+    default: ''
+
+  api_key:
+    description: >-
+      Cloudflare Global API Key. Required only when `bearer_token` is empty;
+      must be paired with `email`. Store as a repository secret.
+    required: false
+    default: ''
+
+  dry_run:
+    description: >-
+      When `true`, prints the request that would be sent (with secrets masked)
+      and exits without contacting the Cloudflare API.
+    required: false
+    default: 'false'
+
+  debug:
+    description: >-
+      When `true`, enables verbose logging including HTTP status codes and
+      truncated response bodies. Secrets are still masked.
+    required: false
+    default: 'false'
+
+  timeout:
+    description: 'Per-request timeout in seconds. Defaults to 30.'
+    required: false
+    default: '30'
+
+  retries:
+    description: >-
+      Number of retry attempts on transient failures (HTTP 5xx, 429, network
+      errors). Defaults to 3.
+    required: false
+    default: '3'
+
+  retry_delay:
+    description: >-
+      Base delay in seconds between retries. Exponential backoff with jitter is
+      applied, so actual delays are `retry_delay * 2^attempt + jitter`.
+    required: false
+    default: '2'
+
+  api_endpoint:
+    description: >-
+      Override the Cloudflare API base URL. Useful for testing against mocks.
+      Do not change in production.
+    required: false
+    default: 'https://api.cloudflare.com/client/v4'
+
+outputs:
+  success:
+    description: '`true` if all targeted zones were purged successfully, `false` otherwise.'
+    value: ${{ steps.purge.outputs.success }}
+  response_code:
+    description: 'HTTP status code from the last (or only) API response.'
+    value: ${{ steps.purge.outputs.response_code }}
+  request_id:
+    description: 'Cloudflare `cf-ray` request ID from the last response, useful for support tickets.'
+    value: ${{ steps.purge.outputs.request_id }}
+  purge_type:
+    description: 'The resolved purge type that was executed.'
+    value: ${{ steps.purge.outputs.purge_type }}
+  zones_processed:
+    description: 'Comma-separated list of zone IDs that were successfully purged.'
+    value: ${{ steps.purge.outputs.zones_processed }}
+  failed_zones:
+    description: 'Comma-separated list of zone IDs that failed (empty on full success).'
+    value: ${{ steps.purge.outputs.failed_zones }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate runtime dependencies
+      shell: bash
+      run: |
+        "${{ github.action_path }}/scripts/validate.sh"
+
+    - name: Execute Cloudflare cache purge
+      id: purge
+      shell: bash
+      env:
+        FLAREOPS_ZONE_ID: ${{ inputs.zone_id }}
+        FLAREOPS_ZONE_IDS: ${{ inputs.zone_ids }}
+        FLAREOPS_PURGE_TYPE: ${{ inputs.purge_type }}
+        FLAREOPS_FILES: ${{ inputs.files }}
+        FLAREOPS_HOSTNAMES: ${{ inputs.hostnames }}
+        FLAREOPS_CACHE_TAGS: ${{ inputs.cache_tags }}
+        FLAREOPS_PREFIXES: ${{ inputs.prefixes }}
+        FLAREOPS_BEARER_TOKEN: ${{ inputs.bearer_token }}
+        FLAREOPS_EMAIL: ${{ inputs.email }}
+        FLAREOPS_API_KEY: ${{ inputs.api_key }}
+        FLAREOPS_DRY_RUN: ${{ inputs.dry_run }}
+        FLAREOPS_DEBUG: ${{ inputs.debug }}
+        FLAREOPS_TIMEOUT: ${{ inputs.timeout }}
+        FLAREOPS_RETRIES: ${{ inputs.retries }}
+        FLAREOPS_RETRY_DELAY: ${{ inputs.retry_delay }}
+        FLAREOPS_API_ENDPOINT: ${{ inputs.api_endpoint }}
+      run: |
+        "${{ github.action_path }}/scripts/purge.sh"

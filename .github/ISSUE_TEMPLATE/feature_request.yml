@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest a new module, input, or behavior for FlareOps.
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        FlareOps is a long-term home for Cloudflare-adjacent automation. Good
+        feature requests describe a real workflow problem, not just an API
+        endpoint to wrap. Please include the use case.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - New input/output on an existing module
+        - Behavior change in an existing module
+        - New module (DNS, Workers, R2, WAF, ...)
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow are you trying to enable, and what is blocking you today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: >
+        Sketch the inputs/outputs or CLI you have in mind. A non-binding
+        proposal is fine — we'll iterate in review.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

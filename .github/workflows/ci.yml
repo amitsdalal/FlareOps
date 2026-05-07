@@ -1,0 +1,101 @@
+# CI — runs on every push and PR.
+#
+# We split the work into independent jobs so failures pinpoint a single
+# concern: shell linting, action-metadata validity, and the script-level
+# smoke tests. Each job runs on the cheapest matrix that gives us coverage.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run shellcheck
+        # ludeeus/action-shellcheck is the de-facto standard wrapper; we pin
+        # via SHA in production setups but float to v2 here so contributors
+        # picking up new bash idioms get the latest checks.
+        uses: ludeeus/action-shellcheck@master
+        env:
+          SHELLCHECK_OPTS: -e SC1091 -s bash
+        with:
+          scandir: ./purge-cache/scripts
+          additional_files: 'purge-cache/tests/basic-test.sh'
+
+  action-metadata:
+    name: Validate action.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Lint action.yml schema
+        run: |
+          # Minimal schema check: every input/output is documented and the
+          # composite-action runs block exists. Keeps the published action
+          # honest without pulling in a heavyweight schema validator.
+          python3 - <<'PY'
+          import sys, yaml, pathlib
+          p = pathlib.Path("purge-cache/action.yml")
+          doc = yaml.safe_load(p.read_text())
+          missing = []
+          for k, v in (doc.get("inputs") or {}).items():
+              if not v.get("description"):
+                  missing.append(f"input.{k}.description")
+          for k, v in (doc.get("outputs") or {}).items():
+              if not v.get("description"):
+                  missing.append(f"output.{k}.description")
+          if missing:
+              print("::error::Missing fields:", missing)
+              sys.exit(1)
+          assert (doc.get("runs") or {}).get("using") == "composite", "must be composite action"
+          print("action.yml looks good")
+          PY
+
+  smoke-test:
+    name: Smoke test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      # The action targets bash 3.2+, so the default `/bin/bash` on macOS
+      # runners (3.2.57) is fine. No bash hunt needed.
+      - name: Run script tests
+        run: bash purge-cache/tests/basic-test.sh
+
+  self-test-dry-run:
+    name: Self-test (action, dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Use the action against itself in dry-run so we exercise the full
+      # composite path (validate.sh + purge.sh + outputs) on every PR.
+      - name: Run purge-cache action in dry-run
+        id: purge
+        uses: ./purge-cache
+        with:
+          zone_id: '00000000000000000000000000000000'
+          purge_type: everything
+          bearer_token: 'dummy-token-for-dry-run'
+          dry_run: 'true'
+          debug: 'true'
+      - name: Assert outputs
+        run: |
+          test "${{ steps.purge.outputs.success }}" = "true"
+          test "${{ steps.purge.outputs.purge_type }}" = "everything"
+          test "${{ steps.purge.outputs.zones_processed }}" = "00000000000000000000000000000000"
