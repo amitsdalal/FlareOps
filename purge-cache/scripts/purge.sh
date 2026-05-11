@@ -202,6 +202,16 @@ FAILED=()
 LAST_HTTP_CODE=""
 LAST_REQUEST_ID=""
 
+# Pre-create response tempfiles in this (parent) shell. flareops::http_post
+# runs inside `$(...)` to capture the http_code; that subshell can't propagate
+# its own globals back to us, so we set the paths here and let the function
+# write into them. Reusing the same files across retries/zones is safe — curl
+# `--output`/`--dump-header` overwrite on each call. Cleaned up by the EXIT
+# trap (see flareops::cleanup_tempfiles).
+FLAREOPS_RESPONSE_BODY_FILE="$(mktemp)"
+FLAREOPS_RESPONSE_HEADERS_FILE="$(mktemp)"
+export FLAREOPS_RESPONSE_BODY_FILE FLAREOPS_RESPONSE_HEADERS_FILE
+
 purge_zone() {
   local zone="$1"
   local url="${API_ENDPOINT%/}/zones/${zone}/purge_cache"

@@ -16,6 +16,18 @@ updates, or pin to a full SHA for reproducible builds.
 
 - (placeholder for next release)
 
+## [v1.0.1] — 2026-05-11
+
+### Fixed
+
+- `purge-cache`: `FLAREOPS_RESPONSE_BODY_FILE` / `FLAREOPS_RESPONSE_HEADERS_FILE`
+  unbound-variable crash on the real HTTP path. The tempfile paths were being
+  set inside `flareops::http_post` while that function was invoked from
+  `$(...)`, so the globals never reached the parent shell. Under `set -u` the
+  next access crashed before retries could run, masking the real HTTP status
+  with a shell error. Tempfiles are now created in the parent shell before
+  the curl loop. (#1, regression test added to `tests/basic-test.sh`.)
+
 ## [v1.0.0] — 2026-05-07
 
 ### Added
@@ -36,5 +48,6 @@ updates, or pin to a full SHA for reproducible builds.
 - CI: shellcheck, action-metadata validation, smoke tests on Ubuntu and macOS.
 - Release workflow with floating major tag (`v1`) management.
 
-[Unreleased]: https://github.com/amitsdalal/FlareOps/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/amitsdalal/FlareOps/compare/v1.0.1...HEAD
+[v1.0.1]: https://github.com/amitsdalal/FlareOps/releases/tag/v1.0.1
 [v1.0.0]: https://github.com/amitsdalal/FlareOps/releases/tag/v1.0.0

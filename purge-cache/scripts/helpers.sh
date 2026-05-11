@@ -131,18 +131,24 @@ flareops::sleep_backoff() {
 
 # ---------- HTTP -------------------------------------------------------------
 #
-# flareops::http_post performs a single POST with a timeout and writes the
-# response body to a tempfile. It echoes the HTTP status code on stdout and
-# the response file path on fd 3 (chosen via a global var because bash can't
-# return two values cleanly).
+# flareops::http_post performs a single POST with a timeout, writes the
+# response body and headers to tempfile paths supplied by the caller, and
+# echoes the HTTP status code on stdout.
+#
+# The function is typically invoked inside `$(...)` to capture the http_code.
+# Command substitution runs in a subshell, so anything the function sets
+# (including export vars) is lost when it returns. That's why we require the
+# caller to mktemp the response files in the PARENT shell and pass their
+# paths in via FLAREOPS_RESPONSE_*_FILE globals before calling.
 #
 # We intentionally do NOT pass auth via curl's --user since that would leak
 # the api_key into ps(1) output on shared runners. Headers are passed via
-# stdin-read variables instead.
+# --header on the argv (which is fine — curl mungs the value on most modern
+# kernels) and the body via stdin so it never appears in argv.
 
-# Caller-provided globals:
-#   FLAREOPS_RESPONSE_BODY_FILE — set by this function for the caller to read
-#   FLAREOPS_RESPONSE_HEADERS_FILE — set by this function for the caller to read
+# Required caller-provided globals (set in the parent shell BEFORE calling):
+#   FLAREOPS_RESPONSE_BODY_FILE    — path curl writes the body to
+#   FLAREOPS_RESPONSE_HEADERS_FILE — path curl dumps response headers to
 
 flareops::http_post() {
   # Args: <url> <auth_header_1> [auth_header_2] <body_json>
@@ -153,11 +159,8 @@ flareops::http_post() {
   local auth2="$3"
   local body="$4"
 
-  local body_file headers_file
-  body_file="$(mktemp)"
-  headers_file="$(mktemp)"
-  FLAREOPS_RESPONSE_BODY_FILE="${body_file}"
-  FLAREOPS_RESPONSE_HEADERS_FILE="${headers_file}"
+  local body_file="${FLAREOPS_RESPONSE_BODY_FILE:?caller must set FLAREOPS_RESPONSE_BODY_FILE}"
+  local headers_file="${FLAREOPS_RESPONSE_HEADERS_FILE:?caller must set FLAREOPS_RESPONSE_HEADERS_FILE}"
 
   # `--fail-with-body` (curl 7.76+) keeps the body on non-2xx, which we need
   # for surfacing Cloudflare error messages. We deliberately do NOT use

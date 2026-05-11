@@ -168,6 +168,43 @@ assert_contains "dry-run output: success=true" "success<<FLAREOPS_EOF"$'\n'"true
 assert_contains "dry-run output: zones_processed" "zones_processed" "$(cat "${tmp_output}")"
 rm -f "${tmp_output}" "${tmp_summary}"
 
+# ---------- real http path (failure mode) -----------------------------------
+#
+# Regression test for the v1.0.1 "unbound variable" bug: flareops::http_post
+# was called inside $(...) (a subshell) and tried to propagate tempfile path
+# globals back to the parent. Under `set -u` that crashed before retries.
+# This test points the action at an unreachable endpoint with retries=0 and
+# verifies it exits cleanly with HTTP 000 and no "unbound variable" output.
+
+printf 'purge.sh — real http path (unreachable endpoint)\n'
+
+tmp_output="$(mktemp)"
+set +e
+out="$(
+  GITHUB_OUTPUT="${tmp_output}" \
+  FLAREOPS_ZONE_ID="0123456789abcdef0123456789abcdef" \
+  FLAREOPS_PURGE_TYPE="everything" \
+  FLAREOPS_BEARER_TOKEN="dummy" \
+  FLAREOPS_API_ENDPOINT="http://127.0.0.1:1" \
+  FLAREOPS_TIMEOUT="2" \
+  FLAREOPS_RETRIES="0" \
+  bash "${SCRIPTS_DIR}/purge.sh" 2>&1
+)"
+rc=$?
+set -e
+assert_eq "unreachable endpoint exits 1" "1" "${rc}"
+# The critical assertion: no unbound-variable crash anywhere in the output.
+# If the http_post → parent shell glue regresses, this is what fails first.
+if [[ "${out}" == *"unbound variable"* ]]; then
+  printf '  FAIL unreachable endpoint: stderr contained "unbound variable"\n%s\n' "${out}"
+  FAIL=$((FAIL + 1))
+else
+  printf '  ok   unreachable endpoint: no "unbound variable" in stderr\n'
+  PASS=$((PASS + 1))
+fi
+assert_contains "unreachable endpoint records HTTP 000" "000" "$(cat "${tmp_output}")"
+rm -f "${tmp_output}"
+
 # ---------- summary ----------------------------------------------------------
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
